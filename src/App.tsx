@@ -79,22 +79,44 @@ const App: React.FC = () => {
 		setPrice(row?.Price || '-');
 	}, [options, csvData, productType]);
 
-	// Get unique values for each option
-	const getOptionValues = (opt: any) => {
+	// Get unique values for each option, filtered by previous selections
+	const getOptionValues = (opt: any, currentOptions: Record<string, string>) => {
+		// Filter csvData by previous selections (for options before this one)
+		const optIndex = productType.options.findIndex((o) => o.key === opt.key);
+		const filterKeys = productType.options.slice(0, optIndex).map((o) => o.key);
+		const filteredRows = csvData.filter((row) =>
+			filterKeys.every((k) => {
+				if (!currentOptions[k]) return true;
+				const optionDef = productType.options.find((o) => o.key === k);
+				if (!optionDef) return true;
+				if (k === 'parts' && row['Parts'] && row['Paper Color']) {
+					const display = `${row['Parts']} Part - ${row['Paper Color']}`;
+					return (
+						currentOptions[k] === row['Parts'] ||
+						currentOptions[k] === display
+					);
+				}
+				return row[optionDef.csvColumn] === currentOptions[k];
+			})
+		);
+
 		if (opt.key === 'parts') {
-			// Combine Parts and Paper Color for display
 			const values = Array.from(
 				new Set(
-					csvData
+					filteredRows
 						.filter((row) => row['Parts'] && row['Paper Color'])
 						.map((row) => `${row['Parts']} Part - ${row['Paper Color']}`)
-				)
+					)
 			);
 			return values;
 		}
-		const values = Array.from(
-			new Set(csvData.map((row) => row[opt.csvColumn]).filter(Boolean))
+		let values = Array.from(
+			new Set(filteredRows.map((row) => row[opt.csvColumn]).filter(Boolean))
 		);
+		// For quantity, sort numerically
+		if (opt.key === 'quantity') {
+			values = values.map(Number).sort((a, b) => a - b).map(String);
+		}
 		return values;
 	};
 
@@ -125,10 +147,8 @@ const App: React.FC = () => {
 								? (() => {
 									const val = options[opt.key];
 									if (!val) return '';
-									// If already in display format, return as is
 									if (val.includes('Part -')) return val;
-									// Otherwise, find the first matching display value
-									const found = getOptionValues(opt).find((v) => v.startsWith(val));
+									const found = getOptionValues(opt, options).find((v) => v.startsWith(val));
 									return found || '';
 								})()
 							: options[opt.key] || ''
@@ -136,7 +156,6 @@ const App: React.FC = () => {
 						onChange={(e) => {
 							let val = e.target.value;
 							if (opt.key === 'parts') {
-								// Store just the number of parts (e.g., '2')
 								val = val.split(' ')[0];
 							}
 							setOptions((o) => ({ ...o, [opt.key]: val }));
@@ -144,7 +163,7 @@ const App: React.FC = () => {
 						disabled={!csvData.length}
 					>
 						<option value="">Select {opt.label}</option>
-						{getOptionValues(opt).map((val) => (
+						{getOptionValues(opt, options).map((val) => (
 							<option key={val} value={val}>
 								{val}
 							</option>
