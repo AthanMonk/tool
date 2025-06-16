@@ -86,7 +86,6 @@ const App: React.FC = () => {
 		const filterKeys = productType.options.slice(0, optIndex).map((o) => o.key);
 		const filteredRows = csvData.filter((row) =>
 			filterKeys.every((k) => {
-				if (!currentOptions[k]) return true;
 				const optionDef = productType.options.find((o) => o.key === k);
 				if (!optionDef) return true;
 				if (k === 'parts' && row['Parts'] && row['Paper Color']) {
