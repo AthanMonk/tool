@@ -7,20 +7,26 @@ const PRODUCT_TYPES = [
 		value: 'carbonless-black',
 		csv: 'https://raw.githubusercontent.com/AthanMonk/tc/refs/heads/main/1-Carbonless-Forms-Black.csv',
 		options: [
-			{ label: 'Sides', key: 'sides' },
-			{ label: 'Parts/Paper Color', key: 'parts' },
-			{ label: 'Size', key: 'size' },
-			{ label: 'Quantity', key: 'quantity' },
+			{ label: 'Sides', key: 'sides', csvColumn: 'Sides' },
+			{ label: 'Parts/Paper Color', key: 'parts', csvColumn: 'Parts', displayColumn: 'Paper Color' },
+			{ label: 'Size', key: 'size', csvColumn: 'Size' },
+			{ label: 'Quantity', key: 'quantity', csvColumn: 'Quantity' },
 		],
+		defaultOptions: {
+			sides: 'Single',
+			parts: '2',
+			size: '5.5x8.5',
+			quantity: '500',
+		},
 	},
 	{
 		label: 'CARBONLESS FORMS - Full Color',
 		value: 'carbonless-fullcolor',
 		csv: 'https://raw.githubusercontent.com/AthanMonk/tc/refs/heads/main/2-Carbonless-Forms-Full-Color.csv',
 		options: [
-			{ label: 'Parts/Paper Color', key: 'parts' },
-			{ label: 'Size', key: 'size' },
-			{ label: 'Quantity', key: 'quantity' },
+			{ label: 'Parts/Paper Color', key: 'parts', csvColumn: 'Parts', displayColumn: 'Paper Color' },
+			{ label: 'Size', key: 'size', csvColumn: 'Size' },
+			{ label: 'Quantity', key: 'quantity', csvColumn: 'Quantity' },
 		],
 	},
 ];
@@ -48,7 +54,7 @@ const App: React.FC = () => {
 			.then((res) => res.text())
 			.then((text) => setCsvData(parseCSV(text)))
 			.catch(() => setCsvData([]));
-		setOptions({});
+		setOptions(productType.defaultOptions || {});
 		setPrice('-');
 	}, [productType]);
 
@@ -57,17 +63,37 @@ const App: React.FC = () => {
 		if (!csvData.length) return;
 		// Find row matching all selected options
 		const row = csvData.find((r) =>
-			productType.options.every(
-				(opt) => !options[opt.key] || r[opt.label] === options[opt.key]
-			)
+			productType.options.every((opt) => {
+				if (!options[opt.key]) return true;
+				if (opt.key === 'parts' && r['Parts'] && r['Paper Color']) {
+					// For display, combine Parts and Paper Color
+					const display = `${r['Parts']} Part - ${r['Paper Color']}`;
+					return (
+						options[opt.key] === r['Parts'] ||
+						options[opt.key] === display
+					);
+				}
+				return r[opt.csvColumn] === options[opt.key];
+			})
 		);
 		setPrice(row?.Price || '-');
 	}, [options, csvData, productType]);
 
 	// Get unique values for each option
-	const getOptionValues = (label: string) => {
+	const getOptionValues = (opt: any) => {
+		if (opt.key === 'parts') {
+			// Combine Parts and Paper Color for display
+			const values = Array.from(
+				new Set(
+					csvData
+						.filter((row) => row['Parts'] && row['Paper Color'])
+						.map((row) => `${row['Parts']} Part - ${row['Paper Color']}`)
+				)
+			);
+			return values;
+		}
 		const values = Array.from(
-			new Set(csvData.map((row) => row[label]).filter(Boolean))
+			new Set(csvData.map((row) => row[opt.csvColumn]).filter(Boolean))
 		);
 		return values;
 	};
@@ -79,9 +105,7 @@ const App: React.FC = () => {
 				className="product-type-select"
 				value={productType.value}
 				onChange={(e) => {
-					const pt = PRODUCT_TYPES.find(
-						(pt) => pt.value === e.target.value
-					);
+					const pt = PRODUCT_TYPES.find((pt) => pt.value === e.target.value);
 					if (pt) setProductType(pt);
 				}}
 			>
@@ -96,14 +120,31 @@ const App: React.FC = () => {
 					<select
 						key={opt.key}
 						className="option-select"
-						value={options[opt.key] || ''}
-						onChange={(e) =>
-							setOptions((o) => ({ ...o, [opt.key]: e.target.value }))
+						value={
+							opt.key === 'parts'
+								? (() => {
+									const val = options[opt.key];
+									if (!val) return '';
+									// If already in display format, return as is
+									if (val.includes('Part -')) return val;
+									// Otherwise, find the first matching display value
+									const found = getOptionValues(opt).find((v) => v.startsWith(val));
+									return found || '';
+								})()
+							: options[opt.key] || ''
 						}
+						onChange={(e) => {
+							let val = e.target.value;
+							if (opt.key === 'parts') {
+								// Store just the number of parts (e.g., '2')
+								val = val.split(' ')[0];
+							}
+							setOptions((o) => ({ ...o, [opt.key]: val }));
+						}}
 						disabled={!csvData.length}
 					>
 						<option value="">Select {opt.label}</option>
-						{getOptionValues(opt.label).map((val) => (
+						{getOptionValues(opt).map((val) => (
 							<option key={val} value={val}>
 								{val}
 							</option>
